@@ -35,7 +35,7 @@ export default function Home() {
       <h1 className="text-2xl font-bold">Everywhere AI</h1>
       <div className="border rounded-xl p-3 h-96 overflow-y-auto bg-white/60">
         {messages.length === 0 && (
-          <p className="text-gray-500">Try: "What’s on my schedule today?"</p>
+          <p className="text-gray-500">Try: &quot;What’s on my schedule today?&quot;</p>
         )}
         {messages.map((m, i) => (
           <div key={i} className={`my-2 ${m.role === 'user' ? 'text-right' : 'text-left'}`}>
