@@ -4,6 +4,7 @@ import "./globals.css";
 
 import { Inter } from 'next/font/google'
 import SwRegister from './sw-register'
+import Providers from './providers'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,8 +27,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={inter.className}>
-        <SwRegister />
-        <main className="mx-auto max-w-screen-sm p-4">{children}</main>
+        //<SwRegister />
+          <Providers>
+            <main className="mx-auto max-w-screen-sm p-4">{children}</main>
+          </Providers>
       </body>
     </html>
   )

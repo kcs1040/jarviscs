@@ -1,5 +1,4 @@
-// app/page.tsx — FULL (Meetings by calendarId + Better error)
-// 새로 추가/변경된 부분에는 // NEW: 주석이 있습니다.
+// app/page.tsx — BASE (before adding meetings feature)
 'use client'
 
 import { useState } from 'react'
@@ -16,7 +15,7 @@ type CalEvent = {
   htmlLink?: string
 }
 
-// 보기 좋은 날짜/시간 포맷터
+// 날짜/시간 보기 좋게 포맷
 const fmt = (v: string) => {
   if (!v) return ''
   const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(v)
@@ -40,7 +39,7 @@ export default function Home() {
   const [events, setEvents] = useState<CalEvent[]>([])
   const [loadingEvents, setLoadingEvents] = useState(false)
 
-  // 데모 챗
+  // 데모 챗 요청
   const send = async () => {
     if (!input.trim()) return
     const next = [...messages, { role: 'user' as const, content: input }]
@@ -110,62 +109,6 @@ export default function Home() {
     }
   }
 
-  // NEW: 다음 주 회의 — 캘린더 ID로 호출 (에러 메시지 자세히)
-  const fetchNextWeekMeetings = async () => {
-    setLoadingEvents(true)
-    try {
-      // ⬇️ 여기 캘린더 ID를 List calendars에서 복사해 넣으세요
-      const calendarId = '749e9ade9aff6d7692f5dba4687aeee68537996692069ae0cef351016ba05009@group.calendar.google.com'
-
-      const res = await fetch(
-        `/api/calendar/meetings/next-week?calendarId=${encodeURIComponent(calendarId)}`
-      )
-
-      // 실패 원인을 정확히 보기 위해 텍스트 → JSON 파싱 시도
-      const raw = await res.text()
-      let body: any = {}
-      try { body = raw ? JSON.parse(raw) : {} } catch { /* ignore */ }
-
-      if (!res.ok) {
-        console.error('Meetings API error', res.status, body || raw)
-        const detail =
-          typeof body?.error === 'string'
-            ? body.error
-            : body?.error
-              ? JSON.stringify(body.error)
-              : raw?.slice(0, 300)
-        alert(`Failed to fetch next-week meetings. (${res.status})\n${detail || ''}`)
-        return
-      }
-
-      setEvents(Array.isArray(body.events) ? body.events : [])
-    } catch (e) {
-      console.error(e)
-      alert('Failed to fetch next-week meetings.')
-    } finally {
-      setLoadingEvents(false)
-    }
-  }
-
-  // NEW: 내 캘린더 목록(이름/ID) 보기 — 401이면 왜 그런지 같이 표시
-  const listCalendars = async () => {
-    try {
-      const r = await fetch('/api/calendar/list')
-      const raw = await r.text()
-      let d: any = {}
-      try { d = raw ? JSON.parse(raw) : {} } catch { /* ignore */ }
-
-      if (!r.ok) {
-        alert(`List failed (${r.status})\n${d?.error ? JSON.stringify(d.error) : raw}`)
-        return
-      }
-      const lines = (d.items || []).map((i: any) => `${i.summary || i.summaryOverride}  —  ${i.id}`)
-      alert('캘린더 목록:\n' + (lines.join('\n') || '(비어 있음)'))
-    } catch {
-      alert('Failed to list calendars.')
-    }
-  }
-
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Everywhere AI</h1>
@@ -201,24 +144,6 @@ export default function Home() {
           disabled={loadingEvents}
         >
           Show today
-        </button>
-
-        {/* NEW: 다음 주 회의 버튼 */}
-        <button
-          onClick={fetchNextWeekMeetings}
-          className="px-3 py-2 rounded-xl bg-purple-600 text-white disabled:opacity-60"
-          disabled={loadingEvents}
-        >
-          Next week meeting
-        </button>
-
-        {/* NEW: 캘린더 목록 보기 버튼 */}
-        <button
-          onClick={listCalendars}
-          className="px-3 py-2 rounded-xl bg-gray-800 text-white disabled:opacity-60"
-          disabled={loadingEvents}
-        >
-          List calendars
         </button>
       </div>
 
