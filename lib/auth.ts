@@ -1,5 +1,4 @@
 // lib/auth.ts
-import "@/types/next-auth"   // ✅ 타입 보강을 컴파일에 확실히 포함
 import NextAuth, { type NextAuthConfig } from "next-auth"
 import Google from "next-auth/providers/google"
 import type { JWT } from "next-auth/jwt"
