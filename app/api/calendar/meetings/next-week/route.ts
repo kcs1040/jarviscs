@@ -1,12 +1,12 @@
-// app/api/calendar/meetings/next-week/route.ts
 export const runtime = 'nodejs'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
+import { getToken } from 'next-auth/jwt'
 
 function nextWeekRange() {
   const now = new Date()
-  const dow = now.getDay() // 0=Sun
+  const dow = now.getDay()
   let addDays = (8 - dow) % 7
   if (addDays === 0) addDays = 7
   const start = new Date(now); start.setHours(0,0,0,0); start.setDate(start.getDate() + addDays)
@@ -15,37 +15,33 @@ function nextWeekRange() {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await auth()
-  const accessToken = session?.access_token
+  // session → getToken 순서로 확보
+  let accessToken = (await auth())?.access_token as string | undefined
+  if (!accessToken) {
+    const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET
+    const jwt = await getToken({ req, secret })
+    accessToken = (jwt as any)?.access_token as string | undefined
+  }
   if (!accessToken) {
     return NextResponse.json({ error: 'Not signed in with Google' }, { status: 401 })
-    }
+  }
 
   const { searchParams } = new URL(req.url)
-  const calendarIdParam = searchParams.get('calendarId')
+  let calId = searchParams.get('calendarId')
   const calendarName = searchParams.get('calendar') || '업무_회의'
-  let calId = calendarIdParam as string | null
 
-  // ID가 없으면 이름으로 탐색
   if (!calId) {
     const listRes = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
       headers: { Authorization: `Bearer ${accessToken}` },
       next: { revalidate: 0 },
     })
     const list = await listRes.json()
-    if (!listRes.ok) {
-      return NextResponse.json({ error: list.error || list }, { status: listRes.status })
-    }
+    if (!listRes.ok) return NextResponse.json({ error: list.error || list }, { status: listRes.status })
     const items = Array.isArray(list.items) ? list.items : []
-    const cal = items.find(
-      (c: any) => c.summary === calendarName || c.summaryOverride === calendarName
-    )
+    const cal = items.find((c: any) => c.summary === calendarName || c.summaryOverride === calendarName)
     if (!cal) {
       const available = items.map((c: any) => c.summary || c.summaryOverride).filter(Boolean)
-      return NextResponse.json(
-        { error: `Calendar not found: ${calendarName}`, availableCalendars: available },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: `Calendar not found: ${calendarName}`, availableCalendars: available }, { status: 404 })
     }
     calId = cal.id
   }
@@ -64,18 +60,13 @@ export async function GET(req: NextRequest) {
     next: { revalidate: 0 },
   })
   const data = await evRes.json()
-  if (!evRes.ok) {
-    return NextResponse.json({ error: data.error || data }, { status: evRes.status })
-  }
+  if (!evRes.ok) return NextResponse.json({ error: data.error || data }, { status: evRes.status })
 
   const events = (data.items || []).map((ev: any) => ({
-    id: ev.id,
-    title: ev.summary || '(no title)',
+    id: ev.id, title: ev.summary || '(no title)',
     start: ev.start?.dateTime || ev.start?.date,
     end: ev.end?.dateTime || ev.end?.date,
-    location: ev.location || '',
-    htmlLink: ev.htmlLink,
+    location: ev.location || '', htmlLink: ev.htmlLink,
   }))
-
   return NextResponse.json({ events })
 }
