@@ -1,6 +1,8 @@
 // app/api/calendar/meetings/next-week/route.ts
+export const runtime = 'nodejs'
+
 import { NextRequest, NextResponse } from 'next/server'
-import { getToken } from 'next-auth/jwt'
+import { auth } from '@/lib/auth'
 
 function nextWeekRange() {
   const now = new Date()
@@ -13,37 +15,41 @@ function nextWeekRange() {
 }
 
 export async function GET(req: NextRequest) {
-  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET // ✅
-  const token = await getToken({ req, secret })
-  if (!token || (!token.access_token && !token.refresh_token)) {
+  const session = await auth()
+  const accessToken = session?.access_token
+  if (!accessToken) {
     return NextResponse.json({ error: 'Not signed in with Google' }, { status: 401 })
-  }
-  const accessToken = (token as any).access_token as string | undefined
-  if (!accessToken) return NextResponse.json({ error: 'No access token' }, { status: 401 })
+    }
 
   const { searchParams } = new URL(req.url)
+  const calendarIdParam = searchParams.get('calendarId')
   const calendarName = searchParams.get('calendar') || '업무_회의'
-  const calendarIdParam = searchParams.get('calendarId') // 직접 ID로 요청도 허용
+  let calId = calendarIdParam as string | null
 
-  // 1) 캘린더 ID 찾기
-  let calId = calendarIdParam
-  let calSummary: string | undefined
+  // ID가 없으면 이름으로 탐색
   if (!calId) {
     const listRes = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
-      headers: { Authorization: `Bearer ${accessToken}` }, next: { revalidate: 0 },
+      headers: { Authorization: `Bearer ${accessToken}` },
+      next: { revalidate: 0 },
     })
     const list = await listRes.json()
-    if (!listRes.ok) return NextResponse.json({ error: list.error || 'Failed to list calendars' }, { status: 500 })
+    if (!listRes.ok) {
+      return NextResponse.json({ error: list.error || list }, { status: listRes.status })
+    }
     const items = Array.isArray(list.items) ? list.items : []
-    const cal = items.find((c: any) => c.summary === calendarName || c.summaryOverride === calendarName)
+    const cal = items.find(
+      (c: any) => c.summary === calendarName || c.summaryOverride === calendarName
+    )
     if (!cal) {
       const available = items.map((c: any) => c.summary || c.summaryOverride).filter(Boolean)
-      return NextResponse.json({ error: `Calendar not found: ${calendarName}`, availableCalendars: available }, { status: 404 })
+      return NextResponse.json(
+        { error: `Calendar not found: ${calendarName}`, availableCalendars: available },
+        { status: 404 }
+      )
     }
-    calId = cal.id; calSummary = cal.summary || cal.summaryOverride
+    calId = cal.id
   }
 
-  // 2) 다음주 범위 조회
   const { startIso, endIso } = nextWeekRange()
   const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId!)}/events`)
   url.searchParams.set('singleEvents', 'true')
@@ -53,20 +59,23 @@ export async function GET(req: NextRequest) {
   url.searchParams.set('maxResults', '50')
   url.searchParams.set('timeZone', 'Asia/Seoul')
 
-  const evRes = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` }, next: { revalidate: 0 } })
+  const evRes = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    next: { revalidate: 0 },
+  })
   const data = await evRes.json()
-  if (!evRes.ok) return NextResponse.json({ error: data.error || 'Google API error' }, { status: 500 })
+  if (!evRes.ok) {
+    return NextResponse.json({ error: data.error || data }, { status: evRes.status })
+  }
 
   const events = (data.items || []).map((ev: any) => ({
-    id: ev.id, title: ev.summary || '(no title)',
+    id: ev.id,
+    title: ev.summary || '(no title)',
     start: ev.start?.dateTime || ev.start?.date,
     end: ev.end?.dateTime || ev.end?.date,
-    location: ev.location || '', htmlLink: ev.htmlLink,
+    location: ev.location || '',
+    htmlLink: ev.htmlLink,
   }))
 
-  return NextResponse.json({
-    calendarId: calId, calendarSummary: calSummary ?? calendarName,
-    range: { start: startIso, end: endIso },
-    events,
-  })
+  return NextResponse.json({ events })
 }
